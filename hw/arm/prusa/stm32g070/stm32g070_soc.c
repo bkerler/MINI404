@@ -41,6 +41,8 @@
 
 OBJECT_DECLARE_SIMPLE_TYPE(STM32G070_STRUCT_NAME(), STM32G070XX_BASE)
 
+#define NO_GLOBAL_SYSMEM 1
+
 struct STM32G070_STRUCT_NAME() {
     /*< private >*/
     STM32SOC parent;
@@ -48,13 +50,12 @@ struct STM32G070_STRUCT_NAME() {
 
     ARMv7MState armv7m;
 
-	MemoryRegion *system_memory;
-
     MemoryRegion sram;
     MemoryRegion sram_alias;
     MemoryRegion flash;
     MemoryRegion flash_alias;
     MemoryRegion ccmsram;
+    MemoryRegion tmp;
 };
 
 static void stm32g070_soc_initfn(Object *obj)
@@ -69,15 +70,21 @@ static void stm32g070_soc_initfn(Object *obj)
 static void stm32g070_soc_realize(DeviceState *dev_soc, Error **errp)
 {
 	STM32G070_STRUCT_NAME() *s = STM32G070XX_BASE(dev_soc);
+	const stm32_soc_cfg_t* cfg = (STM32_SOC_GET_CLASS(dev_soc))->cfg;
+#ifdef NO_GLOBAL_SYSMEM
+	memory_region_init(&s->parent.sys_memory, OBJECT(s), cfg->name ,UINT32_MAX);
+	address_space_init(&s->parent.as_sys_memory, &s->parent.sys_memory, cfg->name);
+	MemoryRegion* system_memory = &s->parent.sys_memory;
+	s->parent.has_sys_memory = true;
+#else
     MemoryRegion *system_memory = get_system_memory();
+#endif
     DeviceState *armv7m;
     Error *err = NULL;
 
 	hwaddr flash_size = stm32_soc_get_flash_size(dev_soc);
 	hwaddr sram_size = stm32_soc_get_sram_size(dev_soc);
 	hwaddr ccmsram_size = stm32_soc_get_ccmsram_size(dev_soc);
-
-	const stm32_soc_cfg_t* cfg = (STM32_SOC_GET_CLASS(dev_soc))->cfg;
 
 	stm32_soc_setup_flash(dev_soc, &s->flash, &err);
 
@@ -180,7 +187,9 @@ static void stm32g070_soc_realize(DeviceState *dev_soc, Error **errp)
 		}
 	}
 
-    create_unimplemented_device("PWR",         0x40007000, 1U * KiB);
+    // Create a temporary memory region for PWR. This goes away once it's implemented...
+	memory_region_init_ram(&s->tmp, OBJECT(dev_soc), "PWR", 1U * KiB, &error_fatal);
+	memory_region_add_subregion(&s->parent.sys_memory, 0x40007000, &s->tmp);
 
 }
 
