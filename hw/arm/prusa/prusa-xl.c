@@ -42,6 +42,8 @@
 #include "hw/arm/armv7m.h"
 #include "parts/spi_rgb.h"
 
+#define TYPE_XLBUDDY_MACHINE "xlbuddy-machine"
+
 #define BOOTLOADER_IMAGE "Prusa_XL_Boot.bin"
 #define XFLASH_FN  "Prusa_XL_xflash.bin"
 #define EEPROM_FN  "Prusa_XL_eeprom.bin"
@@ -78,6 +80,7 @@ typedef struct xl_cfg_t {
     stm_pin lcd_cs;
     bool lcd_cs_invert;
     stm_pin lcd_cd;
+    uint8_t sled_spi;
     uint8_t w25_spi;
     stm_pin w25_cs;
     uint8_t at24_i2c;
@@ -101,14 +104,32 @@ typedef struct xl_cfg_t {
     uint8_t m_spi;
 	uint8_t m_uart;
 	bool is_400step;
+    uint8_t bom_id;
 
 } xl_cfg_t;
+
+typedef struct xlBuddyMachineClass {
+    MachineClass        parent;
+    const xl_cfg_t     *cfg;
+} xlBuddyMachineClass;
+
+typedef struct xlBuddyData {
+	const xl_cfg_t* cfg;
+	const char* name;
+	const char* descr;
+} xlBuddyData;
+
+#define XLBUDDY_MACHINE_CLASS(klass)                                    \
+    OBJECT_CLASS_CHECK(xlBuddyMachineClass, (klass), TYPE_XLBUDDY_MACHINE)
+#define XLBUDDY_MACHINE_GET_CLASS(obj)                                  \
+    OBJECT_GET_CLASS(xlBuddyMachineClass, (obj), TYPE_XLBUDDY_MACHINE)
+
 
 static const xl_cfg_t xl_cfg = {
     .lcd_spi = STM32_P_SPI6,
     .lcd_cs = STM_PIN(GPIOD,11),
-    .lcd_cs_invert = false,
     .lcd_cd = STM_PIN(GPIOD,15),
+    .sled_spi = STM32_P_SPI6,
     .w25_spi = STM32_P_SPI5,
     .w25_cs = STM_PIN(GPIOF,2),
     .at24_i2c = STM32_P_I2C2,
@@ -132,13 +153,14 @@ static const xl_cfg_t xl_cfg = {
     .m_spi = STM32_P_SPI3,
 	.m_uart = STM32_P_UART1,
 	.is_400step = false,
+    .bom_id = 4,
 };
 
 static const xl_cfg_t xl_cfg_050 = {
     .lcd_spi = STM32_P_SPI6,
     .lcd_cs = STM_PIN(GPIOD,11),
-    .lcd_cs_invert = false,
     .lcd_cd = STM_PIN(GPIOD,15),
+    .sled_spi = STM32_P_SPI4,
     .w25_spi = STM32_P_SPI5,
     .w25_cs = STM_PIN(GPIOF,2),
     .at24_i2c = STM32_P_I2C2,
@@ -162,20 +184,52 @@ static const xl_cfg_t xl_cfg_050 = {
     .m_spi = STM32_P_SPI3,
 	.m_uart = STM32_P_UART1,
 	.is_400step = false,
+    .bom_id = 5,
 };
+
+static const xl_cfg_t xl_cfg_090 = {
+    .lcd_spi = STM32_P_SPI6,
+    .lcd_cs = STM_PIN(GPIOD,11),
+    .lcd_cd = STM_PIN(GPIOD,15),
+    .sled_spi = STM32_P_SPI6,
+    .w25_spi = STM32_P_SPI5,
+    .w25_cs = STM_PIN(GPIOF,2),
+    .at24_i2c = STM32_P_I2C2,
+	.usbc_i2c = STM32_P_I2C1,
+    .hx717_data = STM_PIN(GPIOE,7),
+    .hx717_sck = STM_PIN(GPIOG,1),
+    .enc_a = STM_PIN(GPIOD,13),
+    .enc_b = STM_PIN(GPIOD,12),
+    .enc_btn = STM_PIN(GPIOG,3),
+    .z_min = STM_PIN(GPIOB, 8),
+    .has_at21 = false, // NOT IMPLEMENTED YET
+    .e_table_index = 2005,
+    .motor = TMC2130,
+    .m_label = {'A','B','Z','E'},
+	.m_inversion = {1,0,0,0},
+    .m_step = { STM_PIN(GPIOD,7), STM_PIN(GPIOD,5), STM_PIN(GPIOD,3), STM_PIN(GPIOD,1)},
+    .m_dir = { STM_PIN(GPIOD,6), STM_PIN(GPIOD,4), STM_PIN(GPIOD,2), STM_PIN(GPIOD,0)},
+    .m_en = { STM_PIN(GPIOB,9), STM_PIN(GPIOB,9), STM_PIN(GPIOB,8), STM_PIN(GPIOD,10)},
+    .m_diag = { STM_PIN(GPIOG,9), STM_PIN(GPIOE,13), STM_PIN(GPIOB,4), STM_PIN(GPIOD,14)},
+    .m_select = {STM_PIN(GPIOG,15), STM_PIN(GPIOB,5), STM_PIN(GPIOG,10), STM_PIN(GPIOF,12)},
+    .m_spi = STM32_P_SPI3,
+	.m_uart = STM32_P_UART1,
+	.is_400step = false,
+    .bom_id = 9,
+};
+
 #include "otp.h"
 #define DWARF_BOOTLOADER_IMAGE "bl_dwarf.elf.bin"
 
-static void xl_init(MachineState *machine, xl_cfg_t cfg)
+static void xl_init(MachineState *machine)
 {
+    const xlBuddyMachineClass *mc = XLBUDDY_MACHINE_GET_CLASS(OBJECT(machine));
+    const xl_cfg_t cfg = *mc->cfg;
 
-    OTP_v4 otp_data = { .version = 4, .size = sizeof(OTP_v4), .bomID = 4
+
+    OTP_v4 otp_data = { .version = 4, .size = sizeof(OTP_v4), .bomID = cfg.bom_id
 		// .datamatrix = {'4', '5', '5', '8', '-', '2', '7', '0', '0', '0', '0', '1', '9', '0', '0', '5', '2', '5', '9', '9', '9', '9', 0, 0}
 	};
-	if (&cfg == &xl_cfg_050)
-	{
-		otp_data.bomID = 5;
-	}
 
 	uint32_t* otp_raw = (uint32_t*) &otp_data;
     DeviceState *dev;
@@ -267,33 +321,55 @@ static void xl_init(MachineState *machine, xl_cfg_t cfg)
 		qdev_prop_set_uint8(npixel[5],"flags",SPI_RGB_FLAG_ALT_TIMINGS | SPI_RGB_FLAG_INVERTED);
 		ssi_realize_and_unref(npixel[5],
 			(SSIBus*) qdev_get_child_bus(
-				stm32_soc_get_periph(dev_soc, STM32_P_SPI4),
+				stm32_soc_get_periph(dev_soc, cfg.sled_spi),
 			"ssi"),
 		&error_fatal);
 		npixel[4] = qdev_new("spi_rgb");
 		qdev_prop_set_uint8(npixel[4],"led-type",SPI_RGB_WS2811);
-		qdev_prop_set_uint8(npixel[4],"flags", SPI_RGB_FLAG_ALT_TIMINGS | SPI_RGB_FLAG_INVERTED | SPI_RGB_FLAG_NO_CS);
+		//qdev_prop_set_bit(npixel[4],"debug",true);
+        uint8_t flags = SPI_RGB_FLAG_INVERTED;
+        if (cfg.bom_id <=9)
+        {
+            flags |= SPI_RGB_FLAG_NO_CS;
+        }
+        else
+        {
+            flags |= SPI_RGB_FLAG_ALT_TIMINGS;
+        }
+		qdev_prop_set_uint8(npixel[4],"flags", flags);
 		ssi_realize_and_unref(npixel[4],
 			(SSIBus*) qdev_get_child_bus(
-				stm32_soc_get_periph(dev_soc, STM32_P_SPI4),
+				stm32_soc_get_periph(dev_soc, cfg.sled_spi),
 			"ssi"),
 		&error_fatal);
+        qemu_irq lcd_cs = qdev_get_gpio_in_named(lcd_dev, SSI_GPIO_CS, 0);
+        qemu_irq_raise(lcd_cs); // LCD is active low...
+        qemu_irq npixel_cs = qdev_get_gpio_in_named(npixel[0], SSI_GPIO_CS, 0);
+
+        if (cfg.bom_id >= 9)
+        {
+            DeviceState* demux = qdev_new("cs-demux");
+            sysbus_realize_and_unref(SYS_BUS_DEVICE(demux), &error_fatal);
+            qdev_connect_gpio_out(stm32_soc_get_periph(dev_soc, BANK(cfg.lcd_cs)),PIN(cfg.lcd_cs), qdev_get_gpio_in(demux, 0));
+            qdev_connect_gpio_out(stm32_soc_get_periph(dev_soc, STM32_P_GPIOE), 9, qdev_get_gpio_in(demux, 1));
+            // 0 = LCD, 1 = display RGB, 2 = sidebar RGB
+
+            // demux output will be active high
+            qdev_connect_gpio_out(demux,0, qemu_irq_invert(lcd_cs));
+            qdev_connect_gpio_out(demux,1, npixel_cs);
+            qdev_connect_gpio_out(demux,2, qdev_get_gpio_in_named(npixel[4], SSI_GPIO_CS, 0));
+
+        }
+        else
+        {
+            qemu_irq led_cs = qemu_irq_split(lcd_cs, npixel_cs);
+            qdev_connect_gpio_out(stm32_soc_get_periph(dev_soc, BANK(cfg.lcd_cs)),PIN(cfg.lcd_cs),led_cs);
+        }
 		qdev_connect_gpio_out(npixel[4], 0, qdev_get_gpio_in(npixel[5], 0));
 		qdev_connect_gpio_out_named(npixel[4], "reset-out", 0, qdev_get_gpio_in_named(npixel[5], "reset", 0));
 
-		qemu_irq lcd_cs = qdev_get_gpio_in_named(lcd_dev, SSI_GPIO_CS, 0);
-        if (cfg.lcd_cs_invert) {
-            lcd_cs = qemu_irq_invert(lcd_cs);
-            qemu_irq_lower(lcd_cs);
-        } else {
-            /* Make sure the select pin is high.  */
-            qemu_irq_raise(lcd_cs);
-        }
         qemu_irq lcd_cd = qdev_get_gpio_in(lcd_dev,0);
         qdev_connect_gpio_out(stm32_soc_get_periph(dev_soc, BANK(cfg.lcd_cd)),PIN(cfg.lcd_cd), lcd_cd);
-
-		qemu_irq led_cs = qemu_irq_split(lcd_cs, qdev_get_gpio_in_named(npixel[0], SSI_GPIO_CS, 0));
-        qdev_connect_gpio_out(stm32_soc_get_periph(dev_soc, BANK(cfg.lcd_cs)),PIN(cfg.lcd_cs),led_cs);
     }
 
 	{
@@ -541,6 +617,7 @@ static void xl_init(MachineState *machine, xl_cfg_t cfg)
 
 	// Hall sensor mux
 	dev = qdev_new("hc4052");
+    qdev_prop_set_bit(dev,"debug",true);
     sysbus_realize(SYS_BUS_DEVICE(dev), &error_fatal);
     qdev_connect_gpio_out(stm32_soc_get_periph(dev_soc, STM32_P_GPIOF),12,qdev_get_gpio_in_named(dev,"select", 1)); // S0
     qdev_connect_gpio_out(stm32_soc_get_periph(dev_soc, STM32_P_GPIOG),6,qdev_get_gpio_in_named(dev, "select", 0)); // S1
@@ -550,6 +627,7 @@ static void xl_init(MachineState *machine, xl_cfg_t cfg)
     qdev_connect_gpio_out(dev,1, qdev_get_gpio_in_named(stm32_soc_get_periph(dev_soc, STM32_P_ADC3),"adc_data_in", 4));
 
 	#define N_HALL 6
+    // fsensor allowed range is 20-4096
     DeviceState* hall[N_HALL];
 	for (int i=0; i<N_HALL; i++)
 	{
@@ -622,26 +700,6 @@ static void xl_init(MachineState *machine, xl_cfg_t cfg)
 		qdev_connect_gpio_out(split_reset,i, qdev_get_gpio_in(dev,0));
 	}
 
-    // hotend = fan1
-    // print fan = fan0
-    uint16_t fan_max_rpms[] = { 6600, 8000 };
-    uint8_t  fan_pwm_pins[] = { 11, 9};
-    uint8_t fan_tach_pins[] = { 10, 14};
-    uint8_t fan_labels[] = {'P','E'};
-    for (int i=0; i<2; i++)
-    {
-        dev = qdev_new("fan");
-        qdev_prop_set_uint8(dev,"label",fan_labels[i]);
-        qdev_prop_set_uint32(dev, "max_rpm",fan_max_rpms[i]);
-        qdev_prop_set_bit(dev, "is_nonlinear", i); // E is nonlinear.
-        sysbus_realize(SYS_BUS_DEVICE(dev), &error_fatal);
-        qdev_connect_gpio_out_named(dev, "tach-out",0,qdev_get_gpio_in(stm32_soc_get_periph(dev_soc, STM32_P_GPIOE),fan_tach_pins[i]));
-        qdev_connect_gpio_out(stm32_soc_get_periph(dev_soc, STM32_P_GPIOE),fan_pwm_pins[i],qdev_get_gpio_in_named(dev, "pwm-in-soft",0));
-#ifdef BUDDY_HAS_GL
-        qdev_connect_gpio_out_named(dev, "pwm-out", 0, qdev_get_gpio_in_named(gl_db,"indicator-analog",DB_IND_PFAN+i));
-#endif
-    }
-
     DeviceState* encoder = qdev_new("encoder-input");
     sysbus_realize(SYS_BUS_DEVICE(encoder), &error_fatal);
     qdev_connect_gpio_out_named(encoder, "encoder-button",  0,  qdev_get_gpio_in(stm32_soc_get_periph(dev_soc, BANK(cfg.enc_btn)), PIN(cfg.enc_btn)));
@@ -703,34 +761,58 @@ static void xl_init(MachineState *machine, xl_cfg_t cfg)
 
 };
 
-static void xl_core_init(MachineState *mc)
+static void xlbuddy_class_init(ObjectClass *oc, void *data)
 {
-	xl_init(mc, xl_cfg);
+		const xlBuddyData* d = (xlBuddyData*)data;
+	    MachineClass *mc = MACHINE_CLASS(oc);
+	    mc->desc = d->descr;
+	    mc->family = TYPE_XLBUDDY_MACHINE,
+	    mc->init = xl_init;
+	    mc->default_ram_size = 0; // 0 = use default RAM from chip.
+	    mc->no_parallel = 1;
+		mc->no_serial = 1;
+
+		xlBuddyMachineClass* xmc = XLBUDDY_MACHINE_CLASS(oc);
+		xmc->cfg = d->cfg;
 }
 
-static void xl_050_init(MachineState *mc)
-{
-	xl_init(mc, xl_cfg_050);
-}
+static const xlBuddyData xl_040 = {
+    .cfg = &xl_cfg,
+    .descr = "Prusa XL v0.4.0",
+};
 
+static const xlBuddyData xl_050 = {
+    .cfg = &xl_cfg_050,
+    .descr = "Prusa XL v0.5.0",
+};
 
-static void xl_machine_init(MachineClass *mc)
-{
-    mc->desc = "Prusa XL v0.4.0";
-    mc->init = xl_core_init;
-	mc->default_ram_size = 0; // 0 is "use chip default"
-	mc->no_parallel = 1;
-	mc->no_serial = 1;
-}
+static const xlBuddyData xl_090 = {
+    .cfg = &xl_cfg_090,
+    .descr = "Prusa XL v0.9.0",
+};
 
-static void xl_machine_init_v050(MachineClass *mc)
-{
-    mc->desc = "Prusa XL v0.5.0";
-    mc->init = xl_050_init;
-	mc->default_ram_size = 0; // 0 is "use chip default"
-	mc->no_parallel = 1;
-	mc->no_serial = 1;
-}
-
-DEFINE_MACHINE("prusa-xl-040", xl_machine_init)
-DEFINE_MACHINE("prusa-xl-050", xl_machine_init_v050)
+static const TypeInfo xlbuddy_machine_types[] = {
+    {
+        .name           = TYPE_XLBUDDY_MACHINE,
+        .parent         = TYPE_MACHINE,
+		.class_size		= sizeof(xlBuddyMachineClass),
+        .abstract       = true,
+    }, {
+        .name           = MACHINE_TYPE_NAME("prusa-xl-040"),
+        .parent         = TYPE_XLBUDDY_MACHINE,
+		.class_init     = xlbuddy_class_init,
+		.class_data		= (void*)&xl_040,
+    },
+	{
+        .name           = MACHINE_TYPE_NAME("prusa-xl-050"),
+        .parent         = TYPE_XLBUDDY_MACHINE,
+		.class_init     = xlbuddy_class_init,
+		.class_data		= (void*)&xl_050,
+    },{
+        .name           = MACHINE_TYPE_NAME("prusa-xl-090"),
+        .parent         = TYPE_XLBUDDY_MACHINE,
+		.class_init     = xlbuddy_class_init,
+		.class_data		= (void*)&xl_090,
+    }
+};
+DEFINE_TYPES(xlbuddy_machine_types)

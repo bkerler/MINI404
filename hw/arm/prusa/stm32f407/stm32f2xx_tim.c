@@ -169,7 +169,8 @@ f2xx_tim_period(f2xx_tim *s, uint64_t multiplier)
 {
     uint64_t clock_freq = s->parent.clock_freq;
     clock_freq/= (s->defs.PSC+1);
-    return muldiv64(1000000000ULL,multiplier,clock_freq);
+    //printf("Timer %s input: %lu freq: %lu per: %u\n", _PERIPHNAMES[s->parent.periph], clock_freq, muldiv64(1000000000ULL,multiplier,clock_freq), s->defs.ARR+1);
+    return muldiv64(NANOSECONDS_PER_SECOND, multiplier,clock_freq);
 }
 
 static inline int64_t f2xx_tim_ns_to_ticks(f2xx_tim *s, int64_t t)
@@ -178,7 +179,7 @@ static inline int64_t f2xx_tim_ns_to_ticks(f2xx_tim *s, int64_t t)
 	if (clock_freq == 0)
 		return 0;
 	else
-	    return muldiv64(t, clock_freq, 1000000000ULL) / (s->defs.PSC + 1);
+	    return muldiv64(t, clock_freq, NANOSECONDS_PER_SECOND) / (s->defs.PSC + 1);
 }
 
 
