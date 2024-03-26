@@ -3,6 +3,7 @@
 #include "qom/object.h"
 #include "sysemu/block-backend.h"
 #include "hw/boards.h"
+#include "hw/loader.h"
 #include "hw/qdev-core.h"
 #include "qapi/error.h"
 #include "hw/arm/armv7m.h"
@@ -13,6 +14,7 @@
 #include "stm32_rcc.h"
 #include "stm32_rcc_if.h"
 #include "stm32_shared.h"
+#include "hw/arm/boot.h"
 
 static bool create_if_not_exist(const char* default_name, uint32_t file_size)
 {
@@ -198,6 +200,20 @@ static void stm32_peripheral_rcc_reset(void *opaque, int n, int level)
 	}
 }
 
+extern void stm32_soc_load_kernel(Object* obj, const char *filename, hwaddr mem_base, int mem_size)
+{
+    STM32SOC *soc = STM32_SOC(obj);
+    ARMv7MState *arm = ARMV7M(soc->cpu);
+    return armv7m_load_kernel(arm->cpu, filename, mem_base, mem_size);
+}
+
+extern ssize_t stm32_soc_load_targphys(Object* obj, const char *filename, hwaddr addr)
+{
+    STM32SOC *soc = STM32_SOC(obj);
+    ARMv7MState *cpu = ARMV7M(soc->cpu);
+    return load_image_targphys_as(filename, addr, get_image_size(filename), cpu_get_address_space(CPU(cpu), 0));
+}
+
 stm32_periph_t g_stm32_periph_init = STM32_P_UNDEFINED;
 
 static void stm32_soc_instance_init(Object* obj)
@@ -301,6 +317,7 @@ extern void stm32_soc_realize_peripheral(DeviceState* soc_state, stm32_periph_t 
 extern void stm32_soc_realize_all_peripherals(DeviceState *soc_state,Error **errp)
 {
 	STM32SOCClass *c = STM32_SOC_GET_CLASS(soc_state);
+    STM32SOC *s = STM32_SOC(soc_state);
 	uint8_t n_dmas = 0;
 	for (int i=STM32_P_DMA_BEGIN; i<= STM32_P_DMA_END; i++)
 	{
@@ -309,6 +326,14 @@ extern void stm32_soc_realize_all_peripherals(DeviceState *soc_state,Error **err
 	}
 	for (int i=0; i<STM32_P_COUNT; i++)
 	{
+        if (c->cfg->unimplemented[i].type != NULL)
+        {
+            const stm32_periph_cfg_t* cfg = &c->cfg->unimplemented[i];
+            MemoryRegion* mr = g_new0(MemoryRegion, 1);
+            memory_region_init_ram(mr, OBJECT(soc_state), cfg->type, cfg->size, &error_fatal);
+	        memory_region_add_subregion_overlap(&s->sys_memory, cfg->base_addr, mr, -999);
+            continue;
+        }
 		stm32_soc_realize_peripheral(soc_state, i, errp);
 		// Auto wire the DMAR.
 		stm32_soc_connect_periph_dmar(soc_state, i, n_dmas,errp);

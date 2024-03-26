@@ -73,7 +73,6 @@ static void stm32g070_soc_realize(DeviceState *dev_soc, Error **errp)
 	const stm32_soc_cfg_t* cfg = (STM32_SOC_GET_CLASS(dev_soc))->cfg;
 #ifdef NO_GLOBAL_SYSMEM
 	memory_region_init(&s->parent.sys_memory, OBJECT(s), cfg->name ,UINT32_MAX);
-	address_space_init(&s->parent.as_sys_memory, &s->parent.sys_memory, cfg->name);
 	MemoryRegion* system_memory = &s->parent.sys_memory;
 	s->parent.has_sys_memory = true;
 #else
@@ -186,11 +185,6 @@ static void stm32g070_soc_realize(DeviceState *dev_soc, Error **errp)
 			}
 		}
 	}
-
-    // Create a temporary memory region for PWR. This goes away once it's implemented...
-	memory_region_init_ram(&s->tmp, OBJECT(dev_soc), "PWR", 1U * KiB, &error_fatal);
-	memory_region_add_subregion(&s->parent.sys_memory, 0x40007000, &s->tmp);
-
 }
 
 static void stm32g070_soc_class_init(ObjectClass *klass, void *data)

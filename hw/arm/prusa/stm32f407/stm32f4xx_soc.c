@@ -246,21 +246,6 @@ static void stm32f4xx_soc_realize(DeviceState *dev_soc, Error **errp)
 	{
 		memory_region_add_subregion_overlap(&s->armv7m.container, cfg->perhipherals[STM32_P_DWT].base_addr, sysbus_mmio_get_region(SYS_BUS_DEVICE(stm32_soc_get_periph(dev_soc, STM32_P_DWT)),0) ,10);
 	}
-
-    create_unimplemented_device("WWDG",        0x40002C00, 0x400);
-    create_unimplemented_device("I2S2ext",     0x40003000, 0x400);
-    create_unimplemented_device("I2S3ext",     0x40004000, 0x400);
-    create_unimplemented_device("CAN1",        0x40006400, 0x400);
-    create_unimplemented_device("CAN2",        0x40006800, 0x400);
-    create_unimplemented_device("DAC",         0x40007400, 0x400);
-    create_unimplemented_device("SDIO",        0x40012C00, 0x400);
-    create_unimplemented_device("BKPSRAM",     0x40024000, 0x400);
-    create_unimplemented_device("DCMI",        0x50050000, 0x400);
-    create_unimplemented_device("SYSRAM/RSVD",         0x1FFF0000, 0x8000);
-    create_unimplemented_device("ETM/DBGMCU/TIPU", 0xE0001000, 0xFEFFF);
-
-  //  create_unimplemented_device("EXTERNAL",    0xA0000000, 0x3FFFFFFF)
-
 }
 
 static void stm32f4xx_soc_class_init(ObjectClass *klass, void *data)

@@ -109,7 +109,9 @@ typedef struct stm32_reginfo_t
 	_P(OTP), \
 	_P(DWT), \
 	_P(ITM), \
-	_P(DBG),
+	_P(DBG), \
+    _P(ETM), \
+    _P(SYSRAM),
 
 #define _P(x) STM32_P_##x
 

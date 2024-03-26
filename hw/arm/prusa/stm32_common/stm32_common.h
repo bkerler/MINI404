@@ -100,11 +100,13 @@ typedef struct STM32SOC {
 	char* flash_filename; //default file-backed storage for flash.
 	int flash_fd;
 	MemoryRegion sys_memory; // Local CPU system memory. We need this for our multi-cpu instances...
-	AddressSpace as_sys_memory;
 	bool has_sys_memory;
 } STM32SOC;
 
 OBJECT_DECLARE_TYPE(STM32SOC, STM32SOCClass, STM32_SOC);
+
+extern void stm32_soc_load_kernel(Object* obj, const char* filename, hwaddr addr, int max_size);
+extern ssize_t stm32_soc_load_targphys(Object* obj, const char* filename, hwaddr addr);
 
 extern void stm32_soc_machine_init(MachineState *machine);
 
