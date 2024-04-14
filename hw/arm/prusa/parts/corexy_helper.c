@@ -27,6 +27,7 @@
 #include "qom/object.h"
 #include "../utility/p404_motor_if.h"
 #include "hw/sysbus.h"
+#include "hw/qdev-properties.h"
 
 #define TYPE_COREXY "corexy-helper"
 
@@ -41,6 +42,8 @@ struct CoreXYState {
 
     uint32_t x_max_um;
 	uint32_t y_max_um;
+
+    bool swap_calc;
 
 	bool irq_state;
     qemu_irq endstop[2];
@@ -77,6 +80,12 @@ static void corexy_move(void *opaque, int n, int level)
 	}
 	int32_t xpos = (s->pos_a_um + s->pos_b_um)/2.f;
 	int32_t ypos = (s->pos_a_um - s->pos_b_um)/2.f;
+    if (s->swap_calc)
+    {
+        int32_t tmp = xpos;
+        xpos = ypos;
+        ypos = tmp;
+    }
 	s->vis_x.current_pos = (float)xpos/1000.f;
 	s->vis_y.current_pos = (float)ypos/1000.f;
 	s->vis_x.status.stalled = xpos > s->x_max_um || xpos < 0;
@@ -108,16 +117,23 @@ static const p404_motorif_status_t* corexy_get_status(P404MotorIF* p)
     return s->vis;
 }
 
+static void corexy_realize(DeviceState *dev, Error **errp)
+{
+    CoreXYState *s = COREXY(dev);
+	s->vis_x.max_pos = s->x_max_um/(1000U);
+	s->vis_x.status.changed = true;
+	s->vis_y.max_pos = s->y_max_um/(1000U);
+	s->vis_y.status.changed = true;
+}
+
 static void corexy_init(Object *obj)
 {
     CoreXYState *s = COREXY(obj);
-	s->x_max_um = 365*1000;
-	s->y_max_um = 365*1000;
-	s->vis_x.max_pos = 365;
+	s->vis_x.max_pos = s->x_max_um/(1000U);
 	s->vis_x.label = 'X';
 	s->vis_x.status.enabled = true;
 	s->vis_x.status.changed = true;
-	s->vis_y.max_pos = 365;
+	s->vis_y.max_pos = s->y_max_um/(1000U);
 	s->vis_y.label = 'Y';
 	s->vis_y.status.enabled = true;
 	s->vis_y.status.changed = true;
@@ -137,11 +153,20 @@ static const VMStateDescription vmstate_corexy = {
     }
 };
 
+static Property corexy_properties[] = {
+    DEFINE_PROP_UINT32("x-max-um", CoreXYState, x_max_um, 365*1000),
+    DEFINE_PROP_UINT32("y-max-um", CoreXYState, y_max_um, 365*1000),
+    DEFINE_PROP_BOOL("swap-calc", CoreXYState, swap_calc, false),
+    DEFINE_PROP_END_OF_LIST(),
+};
+
 static void corexy_class_init(ObjectClass *oc, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(oc);
     dc->reset = corexy_reset;
+    dc->realize = corexy_realize;
     dc->vmsd = &vmstate_corexy;
+    device_class_set_props(dc, corexy_properties);
 
 	P404MotorIFClass *mc = P404_MOTOR_IF_CLASS(oc);
     mc->get_current_status = corexy_get_status;

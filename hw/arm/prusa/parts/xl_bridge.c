@@ -49,7 +49,7 @@ static const char* shm_names[XL_BRIDGE_COUNT] =
 	"PXL_E3",
 	"PXL_E4",
 	"PXL_E5",
-    "PXL_ESP32"
+    "PXL_ESP32",
 };
 
 // Messages are composed of some GPIO status bits
@@ -93,6 +93,7 @@ struct XLBridgeState {
 	bool de_pin_asserted[XL_BRIDGE_COUNT];
 
 	uint8_t id;
+    bool is_iX;
 
 	uint8_t buffer[256];
 	uint8_t buffer_level;
@@ -394,10 +395,12 @@ static void xl_bridge_realize(DeviceState *dev, Error **errp)
 					qemu_opt_set(opts, "backend","socket", errp);
 					qemu_opt_set(opts, "path", g_strdup_printf("/tmp/%s", shm_names[i]), errp);
 					qemu_opt_set(opts, "server", "on", errp);
-					if (i > XL_DEV_T0 && i != XL_DEV_ESP32) // Only force wait for required items, namely tool 0 and the bed.
-					{
-						qemu_opt_set_bool(opts, "wait", false, errp);
-					}
+                    bool wait = i == XL_DEV_BED;
+                    if (!s->is_iX)
+                    {
+                        wait |= (i == XL_DEV_T0) || (i == XL_DEV_ESP32);
+                    }
+                    qemu_opt_set_bool(opts, "wait", wait, errp);
 					d = qemu_chr_new_from_opts(opts, NULL, errp);
 				qemu_opts_del(opts);
 
@@ -489,6 +492,7 @@ static void xl_bridge_reset(DeviceState *dev)
 
 static Property xl_bridge_properties[] = {
     DEFINE_PROP_UINT8("device", XLBridgeState, id, 0),
+    DEFINE_PROP_BOOL("is-iX", XLBridgeState, is_iX, false),
     DEFINE_PROP_END_OF_LIST(),
 };
 
