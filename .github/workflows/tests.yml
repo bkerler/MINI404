@@ -87,7 +87,8 @@ jobs:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       with: 
         # Comma-separated list of files to upload
-        files: ${{ runner.workspace }}/MINI404/build/meson-logs/c2.info
+        disable_search: true
+        file: ${{ runner.workspace }}/MINI404/build/meson-logs/c2.info
         # Specify whether or not CI build should fail if Codecov runs into an error during upload
         fail_ci_if_error: true
         # Comma-separated list, see the README for options and their usage
