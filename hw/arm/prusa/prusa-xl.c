@@ -221,11 +221,28 @@ static const xl_cfg_t xl_cfg_090 = {
 #include "otp.h"
 #define DWARF_BOOTLOADER_IMAGE "bl_dwarf.elf.bin"
 
+//#define UNIFIED_XL
+
+#ifdef UNIFIED_XL
+#include "prusa-xl-extruder.h"
+static void xl_soc_reset(void *opaque, int n, int level)
+{
+	if (level)
+	{
+        printf("Reset on sub-soc\n");
+		device_cold_reset(DEVICE(opaque));
+	}
+}
+#endif
+
 static void xl_init(MachineState *machine)
 {
     const xlBuddyMachineClass *mc = XLBUDDY_MACHINE_GET_CLASS(OBJECT(machine));
     const xl_cfg_t cfg = *mc->cfg;
 
+#ifdef UNIFIED_XL
+    Object* periphs = container_get(OBJECT(machine), "/peripheral");
+#endif
 
     OTP_v4 otp_data = { .version = 4, .size = sizeof(OTP_v4), .bomID = cfg.bom_id
 		// .datamatrix = {'4', '5', '5', '8', '-', '2', '7', '0', '0', '0', '0', '1', '9', '0', '0', '5', '2', '5', '9', '9', '9', '9', 0, 0}
@@ -235,6 +252,7 @@ static void xl_init(MachineState *machine)
     DeviceState *dev;
 
     dev = qdev_new(TYPE_STM32F427xI_SOC);
+	qdev_prop_set_string(dev, "flash-file", "Prusa_XL_flash.bin");
     qdev_prop_set_string(dev, "cpu-type", ARM_CPU_TYPE_NAME("cortex-m4"));
     qdev_prop_set_uint32(dev,"sram-size", machine->ram_size);
 	
@@ -256,9 +274,7 @@ static void xl_init(MachineState *machine)
     // Parse those now.
     arghelper_setargs(machine->kernel_cmdline);
 	bool args_continue_running = arghelper_parseargs();
-
-	uint64_t flash_size = stm32_soc_get_flash_size(dev);
-
+        
     if (arghelper_is_arg("appendix")) {
         qdev_prop_set_uint32(stm32_soc_get_periph(dev_soc, STM32_P_GPIOA),"idr-mask", 0x2000);
     }
@@ -275,16 +291,12 @@ static void xl_init(MachineState *machine)
         }
         // BBF has an extra 64b header we need to prune. Rather than modify it or use a temp file, offset it
         // by -64 bytes and rely on the bootloader clobbering it.
-        load_image_targphys(machine->kernel_filename,0x20000-64,get_image_size(machine->kernel_filename));
-        armv7m_load_kernel(ARM_CPU(first_cpu),
-            BOOTLOADER_IMAGE, 0,
-            flash_size);
+        stm32_soc_load_targphys(OBJECT(dev_soc), machine->kernel_filename,0x20000-64);
+        stm32_soc_load_kernel(OBJECT(dev_soc), BOOTLOADER_IMAGE);
     }
     else // Raw bin or ELF file, load directly.
     {
-        armv7m_load_kernel(ARM_CPU(first_cpu),
-                        machine->kernel_filename, 0,
-                        flash_size);
+        stm32_soc_load_kernel(OBJECT(dev_soc), machine->kernel_filename);
     }
 
 	DeviceState* key_in = qdev_new("p404-key-input");
@@ -732,6 +744,30 @@ static void xl_init(MachineState *machine)
         // We processed an arg that wants us to quit after it's done.
         qemu_system_shutdown_request(SHUTDOWN_CAUSE_GUEST_SHUTDOWN);
     }
+#ifdef UNIFIED_XL
+    else if (true)
+    {
+        char e_args[] = "no-bridge";
+        char e_kfn[] = "newbl/bootloader-v296-prusa_dwarf-1.0.elf";
+        MachineState extruder =
+        {
+            .kernel_cmdline = e_args,
+            .kernel_filename = e_kfn,
+        };
+        xlExtruderMachineClass extruder_mc = {
+            .flash_filename = xl_extruder_data_E_STM32G00.flash_filename,
+            .hw_type = xl_extruder_data_E_STM32G00.hw_type,
+            .tool_index = xl_extruder_data_E_STM32G00.tool_index,
+            .tool_name = xl_extruder_data_E_STM32G00.tool_name
+        };
+        DeviceState* extruder_soc = prusa_xl_extruder_init(&extruder, &extruder_mc, periphs);
+        qdev_connect_gpio_out_named(stm32_soc_get_periph(dev_soc, STM32_P_UART3),"uart-byte-out", 0, qdev_get_gpio_in_named(stm32_soc_get_periph(extruder_soc, STM32_P_UART1),"byte-in",0));
+        qdev_connect_gpio_out_named(stm32_soc_get_periph(extruder_soc, STM32_P_UART1),"byte-out", 0, qdev_get_gpio_in_named(stm32_soc_get_periph(dev_soc, STM32_P_UART3),"uart-byte-in", 0));
+
+	    qdev_init_gpio_in(extruder_soc, xl_soc_reset, 1);
+	    qdev_connect_gpio_out(expander, 1, qdev_get_gpio_in(extruder_soc,0)); // qdev_get_gpio_in_named(dev,"reset-in",XL_DEV_T0));
+    }
+#endif 
 	else if (kernel_len)
 	{
 		dev = qdev_new("xl-bridge");
@@ -771,7 +807,10 @@ static void xlbuddy_class_init(ObjectClass *oc, void *data)
 	    mc->default_ram_size = 0; // 0 = use default RAM from chip.
 	    mc->no_parallel = 1;
 		mc->no_serial = 1;
-
+#ifdef UNIFIED_XL
+        mc->default_cpus = 2;
+        mc->max_cpus = 2;
+#endif 
 		xlBuddyMachineClass* xmc = XLBUDDY_MACHINE_CLASS(oc);
 		xmc->cfg = d->cfg;
 }

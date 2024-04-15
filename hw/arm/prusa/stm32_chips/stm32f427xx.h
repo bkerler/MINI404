@@ -57,7 +57,6 @@ static const stm32_soc_cfg_t stm32f427xx_cfg =
 		{NULL},
 	},
 	.perhipherals = {
-		//	PER_LNI(flash_if, TYPE_STM32F42x_F43x_FINT, P_FINT, 0x40023C00, F4xx_FLASH_IRQ),
 		PER_LNI(P_FINT, TYPE_STM32F4xx_FINT, 0x40023C00, F4xx_FLASH_IRQ),
 
 		PER_LNI(P_UART1, TYPE_STM32_UART, 0x40011000, F4xx_USART1_IRQ),

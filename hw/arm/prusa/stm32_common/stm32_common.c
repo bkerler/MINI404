@@ -200,11 +200,12 @@ static void stm32_peripheral_rcc_reset(void *opaque, int n, int level)
 	}
 }
 
-extern void stm32_soc_load_kernel(Object* obj, const char *filename, hwaddr mem_base, int mem_size)
+extern void stm32_soc_load_kernel(Object* obj, const char *filename)
 {
     STM32SOC *soc = STM32_SOC(obj);
+    STM32SOCClass *c = STM32_SOC_GET_CLASS(obj);
     ARMv7MState *arm = ARMV7M(soc->cpu);
-    return armv7m_load_kernel(arm->cpu, filename, mem_base, mem_size);
+    armv7m_load_kernel(arm->cpu, filename, c->cfg->flash_base, soc->flash_size);
 }
 
 extern ssize_t stm32_soc_load_targphys(Object* obj, const char *filename, hwaddr addr)
@@ -319,6 +320,7 @@ extern void stm32_soc_realize_all_peripherals(DeviceState *soc_state,Error **err
 	STM32SOCClass *c = STM32_SOC_GET_CLASS(soc_state);
     STM32SOC *s = STM32_SOC(soc_state);
 	uint8_t n_dmas = 0;
+
 	for (int i=STM32_P_DMA_BEGIN; i<= STM32_P_DMA_END; i++)
 	{
 		if (!c->cfg->perhipherals[i].type) break;

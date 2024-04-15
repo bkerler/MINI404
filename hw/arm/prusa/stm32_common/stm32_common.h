@@ -105,7 +105,7 @@ typedef struct STM32SOC {
 
 OBJECT_DECLARE_TYPE(STM32SOC, STM32SOCClass, STM32_SOC);
 
-extern void stm32_soc_load_kernel(Object* obj, const char* filename, hwaddr addr, int max_size);
+extern void stm32_soc_load_kernel(Object* obj, const char* filename);
 extern ssize_t stm32_soc_load_targphys(Object* obj, const char* filename, hwaddr addr);
 
 extern void stm32_soc_machine_init(MachineState *machine);

@@ -471,7 +471,7 @@ static void mk4_init(MachineState *machine)
     }
     else // Raw bin or ELF file, load directly.
     {
-       stm32_soc_load_kernel(OBJECT(dev_soc), machine->kernel_filename, 0, flash_size);
+       stm32_soc_load_kernel(OBJECT(dev_soc), machine->kernel_filename);
     }
 
 	DeviceState* key_in = qdev_new("p404-key-input");

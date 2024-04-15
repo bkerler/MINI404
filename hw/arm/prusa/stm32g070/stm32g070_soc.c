@@ -98,8 +98,12 @@ static void stm32g070_soc_realize(DeviceState *dev_soc, Error **errp)
     memory_region_add_subregion(system_memory, cfg->flash_base, &s->flash);
     memory_region_add_subregion(system_memory, 0, &s->flash_alias);
 
-    memory_region_init_ram(&s->sram, OBJECT(dev_soc), "STM32F030.sram", sram_size,
+    memory_region_init_ram(&s->sram, OBJECT(dev_soc), "STM32G070.sram", sram_size,
                            &err);
+    if (err != NULL) {
+        error_propagate(errp, err); // LCOV_EXCL_LINE
+        return;	// LCOV_EXCL_LINE
+    }
 	memory_region_init_alias(&s->sram_alias, OBJECT(dev_soc),
 		"STM32F030.sram.alias", &s->sram, 0,
 		sram_size);
@@ -108,13 +112,9 @@ static void stm32g070_soc_realize(DeviceState *dev_soc, Error **errp)
 	memory_region_set_enabled(&s->sram_alias, false);
 	memory_region_add_subregion(system_memory, 0, &s->sram_alias);
 
-    if (err != NULL) {
-        error_propagate(errp, err); // LCOV_EXCL_LINE
-        return;	// LCOV_EXCL_LINE
-    }
     memory_region_add_subregion(system_memory, cfg->sram_base, &s->sram);
 
-    memory_region_init_ram(&s->ccmsram, OBJECT(dev_soc), "STM32F030.ccmsram", ccmsram_size,&err);
+    memory_region_init_ram(&s->ccmsram, OBJECT(dev_soc), "STM32G070.ccmsram", ccmsram_size,&err);
 
     memory_region_add_subregion(system_memory, cfg->ccmsram_base, &s->ccmsram);
 
