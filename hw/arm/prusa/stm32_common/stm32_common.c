@@ -326,6 +326,12 @@ extern void stm32_soc_realize_all_peripherals(DeviceState *soc_state,Error **err
 		if (!c->cfg->perhipherals[i].type) break;
 		n_dmas++;
 	}
+    MemoryRegion* dest_region = get_system_memory();
+
+    if (s->has_sys_memory)
+    {
+        dest_region = &s->sys_memory;
+    }
 	for (int i=0; i<STM32_P_COUNT; i++)
 	{
         if (c->cfg->unimplemented[i].type != NULL)
@@ -333,7 +339,7 @@ extern void stm32_soc_realize_all_peripherals(DeviceState *soc_state,Error **err
             const stm32_periph_cfg_t* cfg = &c->cfg->unimplemented[i];
             MemoryRegion* mr = g_new0(MemoryRegion, 1);
             memory_region_init_ram(mr, OBJECT(soc_state), cfg->type, cfg->size, &error_fatal);
-	        memory_region_add_subregion_overlap(&s->sys_memory, cfg->base_addr, mr, -999);
+	        memory_region_add_subregion_overlap(dest_region, cfg->base_addr, mr, -999);
             continue;
         }
 		stm32_soc_realize_peripheral(soc_state, i, errp);
