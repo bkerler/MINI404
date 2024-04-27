@@ -66,11 +66,12 @@ typedef union gpio_state_t{
 		uint8_t nAC    :1;
 		uint8_t reset  :1;
 		uint8_t z_um   :1;
-		uint8_t _reserved :3;
+        uint8_t pick_state :1;
+		uint8_t pick_p0 :1;
+		uint8_t pick_p1 :1;
 	} bits;
 	uint8_t byte;
 } gpio_state_t;
-
 
 struct XLBridgeState {
     SysBusDevice parent_obj;
@@ -282,6 +283,13 @@ static void xl_bridge_gpio_receive(void *opaque, const uint8_t *buf, int size)
 				s->data_remaining = 4; // read 4 more bytes to get actual position.
 			}
 		}
+        if (state.bits.pick_state)
+        {
+            printf("Puppy %s pick state %u %u\n", shm_names[s->id], state.bits.pick_p0, state.bits.pick_p1);
+            qemu_set_irq(s->gpio_out[XLBRIDGE_PIN_E_P0_PARKED],state.bits.pick_p0);
+            qemu_set_irq(s->gpio_out[XLBRIDGE_PIN_E_P1_PICKED],state.bits.pick_p1);
+            return;
+        }
 		PROCESS_BIT(XLBRIDGE_PIN_E_DIR, e_dir);
 		PROCESS_BIT(XLBRIDGE_PIN_E_STEP, e_step);
 		PROCESS_BIT(XLBRIDGE_PIN_nAC_FAULT, nAC);
@@ -310,6 +318,17 @@ static void xl_bridge_reset_in(void *opaque, int n, int level)
 	// Dispatch the new state.
 	qemu_chr_fe_write_all(&s->gpio[n],&s->gpio_states[n].byte, 1);
 	// if (level) printf("Sent reset to %02x, %02x\n", n, s->gpio_states[n].byte);//, shm_names[target]);
+}
+
+static void xl_bridge_pick_in(void *opaque, int n, int level)
+{
+	XLBridgeState *s = XLBRIDGE(opaque);
+    // N is tool number, level is pick state bitmask.
+    gpio_state_t state;
+    state.bits.pick_state = 1;
+    state.bits.pick_p0 = (level & 1) > 0;
+    state.bits.pick_p1 = (level & 2) > 0;
+	qemu_chr_fe_write_all(&s->gpio[XL_DEV_T0 + n],&state.byte, 1);
 }
 
 static void xl_bridge_gpio_in(void *opaque, int n, int level)
@@ -430,6 +449,9 @@ static void xl_bridge_realize(DeviceState *dev, Error **errp)
 		gchar* io_name = g_strdup_printf("%s-io",shm_names[s->id]);
 		Chardev* d2=qemu_chr_find(io_name);
 		g_free(io_name);
+
+        // Set the default sensor state to parked.
+        qemu_set_irq(s->gpio_out[XLBRIDGE_PIN_E_P0_PARKED], 1);
 		// TODO - just create the sockets directly with options here rather than expect the user to get it right.
 		if (d)
 		{
@@ -505,6 +527,7 @@ static void xl_bridge_init(Object *obj)
 	qdev_init_gpio_in_named(dev, xl_bridge_tx_assert, "tx-assert", 1);
 	qdev_init_gpio_out_named(dev, s->byte_receive, "byte-receive", XLBRIDGE_UART_COUNT);
 
+	qdev_init_gpio_in_named(dev, xl_bridge_pick_in, "pick-in", 6);
 	qdev_init_gpio_in_named(dev, xl_bridge_gpio_in, "gpio-in",XLBRIDGE_PIN_COUNT);
 	qdev_init_gpio_in_named(dev, xl_bridge_reset_in, "reset-in", XL_BRIDGE_COUNT);
 	qdev_init_gpio_out_named(dev, s->gpio_out, "gpio-out",XLBRIDGE_PIN_COUNT);

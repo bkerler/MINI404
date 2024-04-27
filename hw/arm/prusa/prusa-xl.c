@@ -566,16 +566,18 @@ static void xl_init(MachineState *machine)
 
     }
 
-	dev = qdev_new("corexy-helper");
-	sysbus_realize_and_unref(SYS_BUS_DEVICE(dev), &error_fatal);
-	qdev_connect_gpio_out(dev, 0, qdev_get_gpio_in_named(motors[0],"ext-stall",0));
-	qdev_connect_gpio_out(dev, 1, qdev_get_gpio_in_named(motors[1],"ext-stall",0));
-    qdev_connect_gpio_out_named(motors[0],"um-out",0,qdev_get_gpio_in(dev,0));
-    qdev_connect_gpio_out_named(motors[1],"um-out",0,qdev_get_gpio_in(dev,1));
+	DeviceState* xy_helper = qdev_new("corexy-helper");
+	sysbus_realize_and_unref(SYS_BUS_DEVICE(xy_helper), &error_fatal);
+	qdev_connect_gpio_out(xy_helper, 0, qdev_get_gpio_in_named(motors[0],"ext-stall",0));
+	qdev_connect_gpio_out(xy_helper, 1, qdev_get_gpio_in_named(motors[1],"ext-stall",0));
+    qdev_connect_gpio_out_named(motors[0],"um-out",0,qdev_get_gpio_in(xy_helper,0));
+    qdev_connect_gpio_out_named(motors[1],"um-out",0,qdev_get_gpio_in(xy_helper,1));
+    qdev_connect_gpio_out_named(xy_helper, "motor-move", 0, qdev_get_gpio_in_named(motors[0],"um-in",0));
+    qdev_connect_gpio_out_named(xy_helper, "motor-move", 1, qdev_get_gpio_in_named(motors[1],"um-in",0));
 
 	// Cheat/hack, the helper will alternate between the status structures it returns when they are polled by the UI.
-	object_property_set_link(OBJECT(db2), "motor[2]", OBJECT(dev), &error_fatal);
-	object_property_set_link(OBJECT(db2), "motor[3]", OBJECT(dev), &error_fatal);
+	object_property_set_link(OBJECT(db2), "motor[2]", OBJECT(xy_helper), &error_fatal);
+	object_property_set_link(OBJECT(db2), "motor[3]", OBJECT(xy_helper), &error_fatal);
 
     sysbus_realize(SYS_BUS_DEVICE(db2), &error_fatal);
 
@@ -784,6 +786,11 @@ static void xl_init(MachineState *machine)
 		qdev_connect_gpio_out(stm32_soc_get_periph(dev_soc, BANK(cfg.m_dir[AXIS_E])),  PIN(cfg.m_dir[AXIS_E]),  qdev_get_gpio_in_named(dev,"gpio-in",XLBRIDGE_PIN_E_DIR));
 
 		qdev_connect_gpio_out_named(motors[2],"um-out",0,qdev_get_gpio_in_named(dev,"gpio-in",XLBRIDGE_PIN_Z_UM));
+
+        for (int i=0; i<5; i++)
+        {
+            qdev_connect_gpio_out_named(xy_helper,"tool-pick",i, qdev_get_gpio_in_named(dev,"pick-in",i));
+        }
 
 		qdev_connect_gpio_out(expander, 7, qdev_get_gpio_in_named(dev,"reset-in",XL_DEV_BED));
 		qdev_connect_gpio_out(expander, 1, qdev_get_gpio_in_named(dev,"reset-in",XL_DEV_T0));

@@ -167,7 +167,7 @@ static void prusa_xl_extruder_init(MachineState *machine)
 	DeviceState* dashboard = qdev_new("2d-dashboard");
     qdev_prop_set_uint8(dashboard, "fans", 2);
     qdev_prop_set_uint8(dashboard, "thermistors", 3);
-    qdev_prop_set_string(dashboard, "indicators", "LPF");
+    qdev_prop_set_string(dashboard, "indicators", "LPFDC");
     qdev_prop_set_string(dashboard, "title", mc->tool_name);
 
 	DeviceState* motor = NULL;
@@ -222,6 +222,22 @@ static void prusa_xl_extruder_init(MachineState *machine)
 	sysbus_realize(SYS_BUS_DEVICE(hall), &error_fatal);
 	qdev_connect_gpio_out_named(hall,"status", 0, qdev_get_gpio_in_named(dashboard,"led-digital",2));
 	qdev_connect_gpio_out(hall, 0, qdev_get_gpio_in_named(stm32_soc_get_periph(dev_soc, STM32_P_ADC1),"adc_data_in", 4));
+
+	DeviceState* park_sense = qdev_new("hall-sensor");
+	qdev_prop_set_uint32(park_sense,"present-value", 1400);
+	qdev_prop_set_uint32(park_sense,"missing-value", 770);
+	sysbus_realize(SYS_BUS_DEVICE(park_sense), &error_fatal);
+	qdev_connect_gpio_out_named(park_sense,"status", 0, qdev_get_gpio_in_named(dashboard,"led-digital",3));
+	qdev_connect_gpio_out(park_sense, 0, qdev_get_gpio_in_named(stm32_soc_get_periph(dev_soc, STM32_P_ADC1),"adc_data_in", 2));
+
+    DeviceState* pick_sense = qdev_new("hall-sensor");
+	qdev_prop_set_uint32(pick_sense,"present-value", 1400);
+	qdev_prop_set_uint32(pick_sense,"missing-value", 770);
+    qdev_prop_set_bit(pick_sense, "start-state", 0);
+	sysbus_realize(SYS_BUS_DEVICE(pick_sense), &error_fatal);
+	qdev_connect_gpio_out_named(pick_sense,"status", 0, qdev_get_gpio_in_named(dashboard,"led-digital",4));
+	qdev_connect_gpio_out(pick_sense, 0, qdev_get_gpio_in_named(stm32_soc_get_periph(dev_soc, STM32_P_ADC1),"adc_data_in", 1));
+
 
     //0 is HBR
     //1 is Print fan
@@ -331,6 +347,8 @@ static void prusa_xl_extruder_init(MachineState *machine)
 		qdev_connect_gpio_out_named(dev, "gpio-out", XLBRIDGE_PIN_E_DIR,qdev_get_gpio_in_named(mux,"B2",0));
 		qdev_connect_gpio_out_named(dev, "gpio-out", XLBRIDGE_PIN_E_STEP,qdev_get_gpio_in_named(mux,"B2",1));
 		qdev_connect_gpio_out_named(dev, "gpio-out", XLBRIDGE_PIN_Z_UM, qdev_get_gpio_in(lc,0));
+        qdev_connect_gpio_out_named(dev, "gpio-out", XLBRIDGE_PIN_E_P0_PARKED, qdev_get_gpio_in_named(park_sense,"ext-in",0));
+        qdev_connect_gpio_out_named(dev, "gpio-out", XLBRIDGE_PIN_E_P1_PICKED, qdev_get_gpio_in_named(pick_sense,"ext-in",0));
 
 		qdev_connect_gpio_out_named(dev, "gpio-out", 0, qdev_get_gpio_in_named(motor,"dir",0));
 		qdev_connect_gpio_out_named(dev, "gpio-out", 1, qdev_get_gpio_in_named(motor,"step",0));
