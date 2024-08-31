@@ -3813,7 +3813,9 @@ static void setup_wait_parent_capabilities(void)
 {
     capng_setpid(syscall(SYS_gettid));
     capng_clear(CAPNG_SELECT_BOTH);
-    capng_apply(CAPNG_SELECT_BOTH);
+    if (capng_apply(CAPNG_SELECT_BOTH) < 0) {
+        fuse_log(FUSE_LOG_ERR, "drop:capng_apply() failed\n");
+    }
 }
 
 /*

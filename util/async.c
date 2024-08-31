@@ -153,7 +153,7 @@ void aio_bh_call(QEMUBH *bh)
 /* Multiple occurrences of aio_bh_poll cannot be called concurrently. */
 int aio_bh_poll(AioContext *ctx)
 {
-    BHListSlice slice;
+    static BHListSlice slice;
     BHListSlice *s;
     int ret = 0;
 

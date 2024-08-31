@@ -126,13 +126,6 @@
 #define FIBMAP     _IO(0x00,1)
 #define FIGETBSZ   _IO(0x00,2)
 
-struct file_clone_range {
-        __s64 src_fd;
-        __u64 src_offset;
-        __u64 src_length;
-        __u64 dest_offset;
-};
-
 #define FICLONE         _IOW(0x94, 9, int)
 #define FICLONERANGE    _IOW(0x94, 13, struct file_clone_range)
 
